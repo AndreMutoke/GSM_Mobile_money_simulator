@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Motorola C200 Simulator</title>
+    
+    <!-- Police rétro pour l'écran LCD -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="tailwind.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'lcd': ['"VT323"', 'monospace'],
+                        'sans': ['Inter', 'sans-serif']
+                    },
+                    colors: {
+                        'lcd-bg': '#a4bf8b',
+                        'phone-bg': '#d8d9db'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #171d19;
+            background-image: radial-gradient(circle, #252d27 0%, #171d19 100%);
+        }
+        .lcd-glow {
+            box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.2);
+        }
+        .key-btn {
+            background: linear-gradient(135deg, #42464d 0%, #22252a 100%);
+            border: 1px solid #1a1a1d;
+            box-shadow: 0 4px 0px #151619, 0 5px 10px rgba(0,0,0,0.5);
+            transition: all 0.05s ease;
+        }
+        .key-btn:active {
+            transform: translateY(3px);
+            box-shadow: 0 1px 0px #151619, 0 2px 4px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4 select-none">
+
+    <!-- Container du Téléphone -->
+    <div class="relative w-[340px] h-[670px] bg-phone-bg rounded-[50px] shadow-2xl border-4 border-[#bcbec1] flex flex-col items-center px-6 pt-8 pb-6 justify-between">
+        
+        <!-- Haut Parleur Motorola -->
+        <div class="flex flex-col items-center gap-1 w-full">
+            <div class="w-16 h-1.5 bg-[#4a4b4c] rounded-full"></div>
+            <div class="w-8 h-1 bg-[#4a4b4c] rounded-full"></div>
+            <!-- Logo rétro émulé -->
+            <div class="text-[10px] font-bold text-[#4a4b4c] tracking-widest mt-1">MOTOROLA</div>
+        </div>
+
+        <!-- Zone Écran LCD rétro -->
+        <div class="w-full h-44 bg-[#7a8e69] rounded-2xl p-3 border-[6px] border-[#31353a] flex flex-col justify-between relative lcd-glow">
+            <!-- Rétro-éclairage actif par dessus -->
+            <div class="absolute inset-0 bg-lcd-bg opacity-40 rounded-[10px] pointer-events-none"></div>
+            
+            <!-- Écran LCD Interne (Texte) -->
+            <div id="lcd-screen" class="font-lcd text-[#1d2319] text-[22px] leading-[22px] tracking-wide flex flex-col justify-between h-full z-10">
+                <!-- Chargé dynamiquement par JS -->
+            </div>
+        </div>
+
+        <!-- Clavier physique simulé -->
+        <div class="w-full flex flex-col gap-3 mt-4">
+            
+            <!-- Touches de Contrôle de Menu Motorola -->
+            <div class="grid grid-cols-3 gap-x-4 px-2">
+                <!-- Option gauche -->
+                <button onclick="handleSoftLeft()" class="h-10 rounded-full bg-gradient-to-b from-[#5c6168] to-[#393d42] border border-[#222] shadow-md active:translate-y-0.5 flex items-center justify-center text-white text-xs font-semibold">
+                    &mdash;
+                </button>
+                <!-- Flèches directionnelles -->
+                <div class="flex flex-col items-center gap-1">
+                    <button onclick="handleArrowUp()" class="w-10 h-6 bg-gradient-to-b from-[#5c6168] to-[#393d42] rounded-t-lg border border-[#222] flex items-center justify-center text-white text-xs">▲</button>
+                    <button onclick="handleArrowDown()" class="w-10 h-6 bg-gradient-to-b from-[#5c6168] to-[#393d42] rounded-b-lg border border-[#222] flex items-center justify-center text-white text-xs">▼</button>
+                </div>
+                <!-- Option droite -->
+                <button onclick="handleSoftRight()" class="h-10 rounded-full bg-gradient-to-b from-[#5c6168] to-[#393d42] border border-[#222] shadow-md active:translate-y-0.5 flex items-center justify-center text-white text-xs font-semibold">
+                    &mdash;
+                </button>
+            </div>
+
+            <!-- Touches de Appel / Fin -->
+            <div class="grid grid-cols-2 gap-x-8 px-4 -mt-1">
+                <button onclick="handleCall()" class="h-10 rounded-xl bg-gradient-to-b from-[#4caf50] to-[#2e7d32] border border-[#1b5e20] shadow-md active:translate-y-0.5 flex items-center justify-center text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
+                </button>
+                <button onclick="handleEnd()" class="h-10 rounded-xl bg-gradient-to-b from-[#f44336] to-[#c62828] border border-[#b71c1c] shadow-md active:translate-y-0.5 flex items-center justify-center text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.725-.94l-2.2-.548a1 1 0 00-.988.321l-1.305 1.305a10.582 10.582 0 01-4.872-4.872l1.305-1.305a1 1 0 00.321-.988l-.548-2.2A1 1 0 0011.28 5H10a2 2 0 00-2 2v1"></path></svg>
+                </button>
+            </div>
+
+            <!-- Pavé Numérique -->
+            <div class="grid grid-cols-3 gap-x-4 gap-y-2 px-2 mt-2">
+                <button onclick="handleKey('1')" class="key-btn h-12 rounded-2xl text-white font-bold flex flex-col items-center justify-center">
+                    <span class="text-lg leading-none">1</span><span class="text-[8px] text-gray-400">@._</span>
+                </button>
+                <button onclick="handleKey('2')" class="key-btn h-12 rounded-2xl text-white font-bold flex flex-col items-center justify-center">
+                    <span class="text-lg leading-none">2</span><span class="text-[8px] text-gray-400">ABC</span>
+                </button>
+                <button onclick="handleKey('3')" class="key-btn h-12 rounded-2xl text-white font-bold flex flex-col items-center justify-center">
+                    <span class="text-lg leading-none">3</span><span class="text-[8px] text-gray-400">DEF</span>
+                </button>
+                
+                <button onclick="handleKey('4')" class="key-btn h-12 rounded-2xl text-white font-bold flex flex-col items-center justify-center">
+                    <span class="text-lg leading-none">4</span><span class="text-[8px] text-gray-400">GHI</span>
+                </button>
+                <button onclick="handleKey('5')" class="key-btn h-12 rounded-2xl text-white font-bold flex flex-col items-center justify-center">
+                    <span class="text-lg leading-none">5</span><span class="text-[8px] text-gray-400">JKL</span>
+                </button>
+                <button onclick="handleKey('6')" class="key-btn h-12 rounded-2xl text-white font-bold flex flex-col items-center justify-center">
+                    <span class="text-lg leading-none">6</span><span class="text-[8px] text-gray-400">MNO</span>
+                </button>
+                
+                <button onclick="handleKey('7')" class="key-btn h-12 rounded-2xl text-white font-bold flex flex-col items-center justify-center">
+                    <span class="text-lg leading-none">7</span><span class="text-[8px] text-gray-400">PQRS</span>
+                </button>
+                <button onclick="handleKey('8')" class="key-btn h-12 rounded-2xl text-white font-bold flex flex-col items-center justify-center">
+                    <span class="text-lg leading-none">8</span><span class="text-[8px] text-gray-400">TUV</span>
+                </button>
+                <button onclick="handleKey('9')" class="key-btn h-12 rounded-2xl text-white font-bold flex flex-col items-center justify-center">
+                    <span class="text-lg leading-none">9</span><span class="text-[8px] text-gray-400">WXYZ</span>
+                </button>
+                
+                <button onclick="handleKey('*')" class="key-btn h-12 rounded-2xl text-white font-bold flex flex-col items-center justify-center">
+                    <span class="text-lg mt-1">*</span><span class="text-[8px] text-gray-400">#</span>
+                </button>
+                <button onclick="handleKey('0')" class="key-btn h-12 rounded-2xl text-white font-bold flex flex-col items-center justify-center">
+                    <span class="text-lg leading-none">0</span><span class="text-[8px] text-gray-400">+</span>
+                </button>
+                <button onclick="handleKey('#')" class="key-btn h-12 rounded-2xl text-white font-bold flex flex-col items-center justify-center">
+                    <span class="text-lg">#</span><span class="text-[8px] text-gray-400">↑</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mentions de bas de page decoratives -->
+        <div class="text-[9px] text-gray-500 font-medium">PASS_USSD SIM v1.2</div>
+    </div>
+
+    <!-- Logique applicative du simulateur -->
+    <script>
+        // Définition des états d'affichage
+        let currentMenuState = "MAIN"; // MAIN, MENU_USSD, RECOLE_NUM, RECOLE_MONTANT, RECOLE_PIN, TRANS_PIN, CONFIRMATION, SOLDE, CHARGEMENT, ERREUR, TRANS_OK
+        let currentInput = ""; // Saisie clavier active
+        
+        let ussdString = ""; // Ex: *1234#
+        let transactionOption = ""; // Option sélectionnée (Envoi, Achat...)
+        let transactionNumber = ""; // Numéro destinataire
+        let transactionAmount = ""; // Montant
+        let transactionPIN = ""; // Code PIN saisi
+        let backendMessage = ""; // Message retourné par le serveur Python
+
+        // Options du menu principal MTK Global Money
+        const menuOptions = [
+            "1. Consulter mon compte",
+            "2. Envoyer de l'argent",
+            "3. Achat Crédit/Forfaits",
+            "4. Paiement facture"
+        ];
+        let menuIndex = 0;
+
+        // Fonction d'envoi de requêtes asynchrones à l'ESP32
+        function envoyerCommandeESP32(action, option, numero, montant, pin = "") {
+            const url = `/commande?action=${encodeURIComponent(action)}&option=${encodeURIComponent(option)}&numero=${encodeURIComponent(numero)}&montant=${encodeURIComponent(montant)}&pin=${encodeURIComponent(pin)}`;
+            
+            console.log("Envoi REQ -> " + url);
+            
+            fetch(url)
+                .then(response => response.text())
+                .then(data => {
+                    console.log("Réponse REQ -> " + data);
+                    traiterReponsePasserelle(data);
+                })
+                .catch(error => {
+                    console.error("Erreur HTTP:", error);
+                    backendMessage = "Erreur de connexion reseau ESP32";
+                    currentMenuState = "ERREUR";
+                    renderScreen();
+                });
+        }
+
+        // Parse et applique la réponse de la passerelle
+        function traiterReponsePasserelle(reponse) {
+            const parts = reponse.split(';');
+            const type = parts[0];
+            const statut = parts[1];
+            let message = parts[2] || "";
+
+            // Convertir les séparateurs de ligne neutres "|" en sauts de ligne "\n"
+            message = message.replace(/\|/g, '\n');
+
+            if (type === "REP_SOLDE" || type === "REP_TRANS" || type === "REPONSE") {
+                if (statut === "OK") {
+                    backendMessage = message;
+                    currentMenuState = (type === "REP_SOLDE") ? "SOLDE" : "TRANS_OK";
+                } else {
+                    backendMessage = message; // PIN incorrect, Solde insuffisant, Destinataire absent, etc.
+                    currentMenuState = "ERREUR";
+                }
+            } else if (type === "REP_INFO") {
+                console.log("Info locale de l'ESP32 : " + message);
+                return;
+            } else {
+                backendMessage = reponse || "Erreur inconnue";
+                currentMenuState = "ERREUR";
+            }
+            renderScreen();
+        }
+
+        // Rendu graphique dynamique de l'écran LCD
+        function renderScreen() {
+            const screen = document.getElementById('lcd-screen');
+            screen.innerHTML = "";
+
+            if (currentMenuState === "MAIN") {
+                screen.innerHTML = `
+                    <div class="flex justify-between items-center text-xs border-b border-[#4e5b43] pb-1">
+                        <span>MTK Global RDC</span>
+                        <span>12:00</span>
+                    </div>
+                    <div class="text-center text-[26px] my-auto py-2 tracking-widest">${currentInput || "Tapez USSD"}</div>
+                    <div class="flex justify-between text-xs border-t border-[#4e5b43] pt-1">
+                        <span>Repertoire</span>
+                        <span>${currentInput.length > 0 ? "Effacer" : "Menu"}</span>
+                    </div>
+                `;
+            }
+            else if (currentMenuState === "MENU_USSD") {
+                screen.innerHTML = `
+                    <div class="text-xs font-bold border-b border-[#4e5b43] pb-0.5">MTK Global Money</div>
+                    <div class="flex flex-col text-[16px] leading-[18px] my-1">
+                        ${menuOptions.map((opt, i) => `
+                            <div class="${i === menuIndex && currentInput === '' ? 'bg-[#4e5b43] text-[#7a8e69] px-1' : ''}">${opt}</div>
+                        `).join('')}
+                    </div>
+                    <div class="mt-auto mb-1">
+                        <div class="text-[14px] bg-[#4e5b43] text-[#7a8e69] px-1 text-center font-bold tracking-widest">${currentInput || "_"}</div>
+                    </div>
+                    <div class="flex justify-between text-xs border-t border-[#4e5b43] pt-0.5">
+                        <span>Annuler</span>
+                        <span>${currentInput.length > 0 ? "Effacer" : "Sélect."}</span>
+                    </div>
+                `;
+            }
+            else if (currentMenuState === "RECOLE_NUM") {
+                screen.innerHTML = `
+                    <div class="text-xs border-b border-[#4e5b43] pb-0.5">${transactionOption}</div>
+                    <div class="my-auto">
+                        <div class="text-[14px]">Numéro destinataire :</div>
+                        <div class="bg-[#4e5b43] text-[#7a8e69] px-1 text-center font-bold tracking-wider mt-1">${currentInput || "_"}</div>
+                    </div>
+                    <div class="flex justify-between text-xs border-t border-[#4e5b43] pt-0.5">
+                        <span>Retour</span>
+                        <span>${currentInput.length > 0 ? "Effacer" : "Continuer"}</span>
+                    </div>
+                `;
+            }
+            else if (currentMenuState === "RECOLE_MONTANT") {
+                screen.innerHTML = `
+                    <div class="text-xs border-b border-[#4e5b43] pb-0.5">Num: ${transactionNumber}</div>
+                    <div class="my-auto">
+                        <div class="text-[14px]">Montant en USD :</div>
+                        <div class="bg-[#4e5b43] text-[#7a8e69] px-1 text-center font-bold mt-1">${currentInput || "_"} USD</div>
+                    </div>
+                    <div class="flex justify-between text-xs border-t border-[#4e5b43] pt-0.5">
+                        <span>Retour</span>
+                        <span>${currentInput.length > 0 ? "Effacer" : "Continuer"}</span>
+                    </div>
+                `;
+            }
+            else if (currentMenuState === "RECOLE_PIN") {
+                screen.innerHTML = `
+                    <div class="text-xs border-b border-[#4e5b43] pb-0.5">Consultation Compte</div>
+                    <div class="my-auto">
+                        <div class="text-[14px]">Entrez votre code PIN:</div>
+                        <div class="bg-[#4e5b43] text-[#7a8e69] px-1 text-center font-bold tracking-widest mt-1">
+                            ${"*".repeat(currentInput.length) || "_"}
+                        </div>
+                    </div>
+                    <div class="flex justify-between text-xs border-t border-[#4e5b43] pt-0.5">
+                        <span>Retour</span>
+                        <span>${currentInput.length > 0 ? "Effacer" : "Consulter"}</span>
+                    </div>
+                `;
+            }
+            else if (currentMenuState === "TRANS_PIN") {
+                screen.innerHTML = `
+                    <div class="text-xs border-b border-[#4e5b43] pb-0.5">Envoi: ${transactionAmount} USD</div>
+                    <div class="my-auto">
+                        <div class="text-[14px]">Entrez code PIN:</div>
+                        <div class="bg-[#4e5b43] text-[#7a8e69] px-1 text-center font-bold tracking-widest mt-1">
+                            ${"*".repeat(currentInput.length) || "_"}
+                        </div>
+                    </div>
+                    <div class="flex justify-between text-xs border-t border-[#4e5b43] pt-0.5">
+                        <span>Annuler</span>
+                        <span>${currentInput.length > 0 ? "Effacer" : "Confirmer"}</span>
+                    </div>
+                `;
+            }
+            else if (currentMenuState === "CHARGEMENT") {
+                screen.innerHTML = `
+                    <div class="text-center my-auto flex flex-col items-center justify-center py-6">
+                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1d2319] mb-2"></div>
+                        <div class="text-[18px] tracking-wide">Communication...</div>
+                    </div>
+                `;
+            }
+            else if (currentMenuState === "SOLDE") {
+                screen.innerHTML = `
+                    <div class="text-xs font-bold border-b border-[#4e5b43] pb-0.5">Compte MTK Global</div>
+                    <div class="text-[16px] my-auto text-center font-semibold leading-none py-1 whitespace-pre-line tracking-wide">
+                        ${backendMessage}
+                    </div>
+                    <div class="flex justify-center text-xs border-t border-[#4e5b43] pt-0.5">
+                        <span>[0] Quitter</span>
+                    </div>
+                `;
+            }
+            else if (currentMenuState === "TRANS_OK") {
+                screen.innerHTML = `
+                    <div class="text-xs font-bold border-b border-[#4e5b43] pb-0.5">MTK Global Money</div>
+                    <div class="text-[14px] my-auto text-center leading-tight whitespace-pre-line text-green-900 font-semibold py-1">
+                        ${backendMessage}
+                    </div>
+                    <div class="flex justify-center text-xs border-t border-[#4e5b43] pt-0.5">
+                        <span>[0] Menu Principal</span>
+                    </div>
+                `;
+            }
+            else if (currentMenuState === "ERREUR") {
+                screen.innerHTML = `
+                    <div class="text-xs font-bold border-b border-[#4e5b43] pb-0.5 text-red-800">Erreur USSD</div>
+                    <div class="text-[14px] my-auto text-center leading-relaxed font-bold">
+                        ${backendMessage || "Operation invalide."}
+                    </div>
+                    <div class="flex justify-center text-xs border-t border-[#4e5b43] pt-0.5">
+                        <span>[0] Recommencer</span>
+                    </div>
+                `;
+            }
+        }
+
+        /* --- Gestion des touches Clavier --- */
+        function handleKey(key) {
+            if (currentMenuState === "MAIN") {
+                currentInput += key;
+            } 
+            else if (currentMenuState === "MENU_USSD") {
+                currentInput += key;
+            }
+            else if (currentMenuState === "RECOLE_NUM" || currentMenuState === "RECOLE_MONTANT") {
+                currentInput += key;
+            }
+            else if (currentMenuState === "RECOLE_PIN" || currentMenuState === "TRANS_PIN") {
+                if (currentInput.length < 4 && !isNaN(key)) {
+                    currentInput += key;
+                }
+            }
+            else if (["SOLDE", "ERREUR", "TRANS_OK"].includes(currentMenuState)) {
+                if (key === "0") {
+                    currentInput = "";
+                    currentMenuState = "MAIN";
+                }
+            }
+            renderScreen();
+        }
+
+        function handleClear() {
+            if (currentInput.length > 0) {
+                currentInput = currentInput.slice(0, -1);
+                renderScreen();
+            }
+        }
+
+        // Navigation Flèches
+        function handleArrowUp() {
+            if (currentMenuState === "MENU_USSD" && menuIndex > 0) {
+                menuIndex--;
+                renderScreen();
+            }
+        }
+
+        function handleArrowDown() {
+            if (currentMenuState === "MENU_USSD" && menuIndex < menuOptions.length - 1) {
+                menuIndex++;
+                renderScreen();
+            }
+        }
+
+        // Touche de Validation GAUCHE / Entrée
+        function handleSoftLeft() {
+            if (currentMenuState === "MENU_USSD") {
+                let choix = currentInput !== "" ? currentInput : (menuIndex + 1).toString();
+                
+                if (choix === "1") {
+                    currentInput = "";
+                    currentMenuState = "RECOLE_PIN";
+                } else if (choix === "2") {
+                    transactionOption = "Envoyer argent";
+                    currentInput = "";
+                    currentMenuState = "RECOLE_NUM";
+                } else {
+                    backendMessage = "Option non supportee";
+                    currentMenuState = "ERREUR";
+                }
+            } 
+            else if (currentMenuState === "RECOLE_NUM") {
+                if (currentInput.length >= 8) {
+                    transactionNumber = currentInput;
+                    currentInput = "";
+                    currentMenuState = "RECOLE_MONTANT";
+                }
+            }
+            else if (currentMenuState === "RECOLE_MONTANT") {
+                if (currentInput.length > 0 && parseFloat(currentInput) > 0) {
+                    transactionAmount = currentInput;
+                    currentInput = "";
+                    currentMenuState = "TRANS_PIN";
+                }
+            }
+            else if (currentMenuState === "RECOLE_PIN") {
+                if (currentInput.length === 4) {
+                    transactionPIN = currentInput;
+                    currentMenuState = "CHARGEMENT";
+                    renderScreen();
+                    setTimeout(() => {
+                        envoyerCommandeESP32("SOLDE", "Consultation", "Aucun", "0", transactionPIN);
+                    }, 800);
+                }
+            }
+            else if (currentMenuState === "TRANS_PIN") {
+                if (currentInput.length === 4) {
+                    transactionPIN = currentInput;
+                    currentMenuState = "CHARGEMENT";
+                    renderScreen();
+                    setTimeout(() => {
+                        envoyerCommandeESP32("CONFIRME", transactionOption, transactionNumber, transactionAmount, transactionPIN);
+                    }, 800);
+                }
+            }
+            renderScreen();
+        }
+
+        // Touche de Navigation DROITE
+        function handleSoftRight() {
+            if (currentInput.length > 0) {
+                handleClear();
+                return;
+            }
+
+            if (currentMenuState === "MENU_USSD") {
+                currentMenuState = "MAIN";
+                currentInput = "";
+            } 
+            else if (currentMenuState === "RECOLE_NUM") {
+                currentMenuState = "MENU_USSD";
+                currentInput = "";
+            }
+            else if (currentMenuState === "RECOLE_MONTANT") {
+                currentMenuState = "RECOLE_NUM";
+                currentInput = transactionNumber;
+            }
+            else if (currentMenuState === "RECOLE_PIN") {
+                currentMenuState = "MENU_USSD";
+                currentInput = "";
+            }
+            else if (currentMenuState === "TRANS_PIN") {
+                currentMenuState = "RECOLE_MONTANT";
+                currentInput = transactionAmount;
+            }
+            renderScreen();
+        }
+
+        // Touche VERTE (Appel)
+        function handleCall() {
+            if (currentMenuState === "MAIN") {
+                if (currentInput === "*1234#") {
+                    currentMenuState = "CHARGEMENT";
+                    renderScreen();
+                    
+                    setTimeout(() => {
+                        envoyerCommandeESP32("APPEL_USSD", "*1234#", "Aucun", "0");
+                        currentMenuState = "MENU_USSD";
+                        menuIndex = 0;
+                        renderScreen();
+                    }, 1000);
+                } else if (currentInput.length > 0) {
+                    backendMessage = "Code MMI non valide.";
+                    currentMenuState = "ERREUR";
+                    renderScreen();
+                }
+            } else {
+                handleSoftLeft();
+            }
+        }
+
+        // Touche ROUGE (Fin)
+        function handleEnd() {
+            currentInput = "";
+            currentMenuState = "MAIN";
+            renderScreen();
+        }
+
+        // Initialisation de l'écran au démarrage
+        renderScreen();
+
+        // Support clavier physique pour une meilleure immersion
+        document.addEventListener('keydown', (e) => {
+            if (e.key >= '0' && e.key <= '9' || e.key === '*' || e.key === '#') {
+                handleKey(e.key);
+            } else if (e.key === 'Backspace') {
+                handleClear();
+            } else if (e.key === 'Enter') {
+                handleCall();
+            } else if (e.key === 'Escape') {
+                handleEnd();
+            } else if (e.key === 'ArrowUp') {
+                handleArrowUp();
+            } else if (e.key === 'ArrowDown') {
+                handleArrowDown();
+            }
+        });
+
+    </script>
+</body>
+</html>

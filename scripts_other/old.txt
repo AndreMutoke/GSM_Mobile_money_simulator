@@ -1,0 +1,261 @@
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_mac.h"
+#include "esp_wifi.h"
+#include "esp_event.h"
+#include "esp_log.h"
+#include "nvs_flash.h"
+#include "esp_littlefs.h"
+#include "esp_http_server.h"
+
+static const char *TAG = "MOTOROLA_SIM";
+
+#define ESP_WIFI_SSID      "MTK_Global"
+#define ESP_WIFI_PASS      ""
+#define MAX_STA_CONN       4
+
+/* --- Fonction utilitaire : Décoder les URL --- */
+void urldecode(char *dst, const char *src) {
+    char a, b;
+    while (*src) {
+        if ((*src == '%') && ((a = src[1]) && (b = src[2])) && (isxdigit((unsigned char)a) && isxdigit((unsigned char)b))) {
+            if (a >= 'a') a -= 'a'-'A';
+            if (a >= 'A') a -= ('A' - 10);
+            else a -= '0';
+            if (b >= 'a') b -= 'a'-'A';
+            if (b >= 'A') b -= ('A' - 10);
+            else b -= '0';
+            *dst++ = 16*a+b;
+            src+=3;
+        } else if (*src == '+') {
+            *dst++ = ' ';
+            src++;
+        } else {
+            *dst++ = *src++;
+        }
+    }
+    *dst++ = '\0';
+}
+
+/* --- Handler HTTP : Servir tailwind.js --- */
+static esp_err_t tailwind_js_handler(httpd_req_t *req) {
+    FILE* f = fopen("/littlefs/tailwind.js", "r");
+    if (f == NULL) {
+        ESP_LOGE(TAG, "Échec d'ouverture de tailwind.js");
+        httpd_resp_send_404(req);
+        return ESP_FAIL;
+    }
+
+    char chunk[1024];
+    size_t read_bytes;
+    httpd_resp_set_type(req, "application/javascript");
+
+    while ((read_bytes = fread(chunk, 1, sizeof(chunk), f)) > 0) {
+        httpd_resp_send_chunk(req, chunk, read_bytes);
+    }
+    httpd_resp_send_chunk(req, NULL, 0);
+    fclose(f);
+    return ESP_OK;
+}
+
+/* --- Handler HTTP : Servir index.html --- */
+static esp_err_t index_html_handler(httpd_req_t *req) {
+    FILE* f = fopen("/littlefs/index.html", "r");
+    if (f == NULL) {
+        ESP_LOGE(TAG, "Échec d'ouverture de index.html");
+        httpd_resp_send_404(req);
+        return ESP_FAIL;
+    }
+
+    char chunk[1024];
+    size_t read_bytes;
+    httpd_resp_set_type(req, "text/html");
+
+    while ((read_bytes = fread(chunk, 1, sizeof(chunk), f)) > 0) {
+        httpd_resp_send_chunk(req, chunk, read_bytes);
+    }
+    httpd_resp_send_chunk(req, NULL, 0);
+    fclose(f);
+    return ESP_OK;
+}
+
+/* --- Handler HTTP : Recevoir les commandes USSD (Enrichi) --- */
+static esp_err_t ussd_get_handler(httpd_req_t *req) {
+    char buf[256];
+    
+    // Variables de réception encodées
+    char cmd_encoded[64] = "";
+    char op_encoded[64] = "";
+    char num_encoded[64] = "";
+    char amt_encoded[64] = "";
+
+    // Variables décodées
+    char cmd_decoded[64] = "Inconnue";
+    char op_decoded[64] = "Non specifiee";
+    char num_decoded[64] = "Aucun";
+    char amt_decoded[64] = "0 FC";
+
+    if (httpd_req_get_url_query_str(req, buf, sizeof(buf)) == ESP_OK) {
+        
+        // Extraction de la touche / commande brute
+        if (httpd_query_key_value(buf, "cmd", cmd_encoded, sizeof(cmd_encoded)) == ESP_OK) {
+            urldecode(cmd_decoded, cmd_encoded);
+        }
+
+        // Extraction de l'option de menu USSD
+        if (httpd_query_key_value(buf, "op", op_encoded, sizeof(op_encoded)) == ESP_OK) {
+            urldecode(op_decoded, op_encoded);
+        }
+
+        // Extraction du numéro récolté
+        if (httpd_query_key_value(buf, "num", num_encoded, sizeof(num_encoded)) == ESP_OK) {
+            urldecode(num_decoded, num_encoded);
+        }
+
+        // Extraction du montant récolté
+        if (httpd_query_key_value(buf, "amt", amt_encoded, sizeof(amt_encoded)) == ESP_OK) {
+            urldecode(amt_decoded, amt_encoded);
+        }
+
+        // Format de rapport lisible envoyé sur l'UART (printf standard)
+        printf("\n");
+        printf("==================================================\n");
+        printf("              TRANSACTION USSD MTK Global             \n");
+        printf("==================================================\n");
+        printf(" Action Clavier : %s\n", cmd_decoded);
+        printf(" Option Menu    : %s\n", op_decoded);
+        printf(" Num. Recole    : %s\n", num_decoded);
+        printf(" Montant        : %s\n", amt_decoded);
+        printf("==================================================\n");
+        printf("\n");
+
+        httpd_resp_send(req, "Donnees de transaction traitees par l'ESP32", HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Requete mal formee");
+    return ESP_FAIL;
+}
+
+/* --- Initialisation du Serveur Web --- */
+static httpd_handle_t start_webserver(void) {
+    httpd_handle_t server = NULL;
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.uri_match_fn = httpd_uri_match_wildcard;
+
+    ESP_LOGI(TAG, "Démarrage du serveur web sur le port: '%d'", config.server_port);
+    if (httpd_start(&server, &config) == ESP_OK) {
+        
+        httpd_uri_t uri_index = {
+            .uri       = "/",
+            .method    = HTTP_GET,
+            .handler   = index_html_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &uri_index);
+
+        httpd_uri_t uri_ussd = {
+            .uri       = "/ussd",
+            .method    = HTTP_GET,
+            .handler   = ussd_get_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &uri_ussd);
+
+        httpd_uri_t uri_tailwind = {
+            .uri       = "/tailwind.js",
+            .method    = HTTP_GET,
+            .handler   = tailwind_js_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &uri_tailwind);
+
+        return server;
+    }
+    ESP_LOGE(TAG, "Erreur lors du démarrage du serveur web");
+    return NULL;
+}
+
+/* --- Gestionnaire d'événements Wi-Fi --- */
+static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    if (event_id == WIFI_EVENT_AP_STACONNECTED) {
+        wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
+        ESP_LOGI(TAG, "Station connectée: MAC " MACSTR ", AID=%d", MAC2STR(event->mac), event->aid);
+    } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
+        wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
+        ESP_LOGI(TAG, "Station déconnectée: MAC " MACSTR ", AID=%d", MAC2STR(event->mac), event->aid);
+    }
+}
+
+/* --- Initialisation Wi-Fi Point d'Accès --- */
+void wifi_init_softap(void) {
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    esp_netif_create_default_wifi_ap();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL));
+
+    // Initialisation sécurisée de la structure Wi-Fi
+    wifi_config_t wifi_config = {
+        .ap = {
+            .channel = 1,
+            .max_connection = MAX_STA_CONN,
+            .authmode = WIFI_AUTH_OPEN // Réseau ouvert, pas de mot de passe
+        },
+    };
+    
+    // Utilisation de strlcpy pour éviter les problèmes d'assignation directe de pointeurs en C
+    strlcpy((char *)wifi_config.ap.ssid, ESP_WIFI_SSID, sizeof(wifi_config.ap.ssid));
+    wifi_config.ap.ssid_len = strlen(ESP_WIFI_SSID);
+    memset(wifi_config.ap.password, 0, sizeof(wifi_config.ap.password));
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    ESP_LOGI(TAG, "Wi-Fi AP démarré avec succès ! SSID: %s", ESP_WIFI_SSID);
+}
+
+/* --- Main Application --- */
+void app_main(void) {
+    // 1. Initialiser NVS (nécessaire pour le Wi-Fi)
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
+    // 2. Initialiser LittleFS
+    ESP_LOGI(TAG, "Initialisation de LittleFS...");
+    esp_vfs_littlefs_conf_t conf = {
+        .base_path = "/littlefs",
+        .partition_label = "storage",
+        .format_if_mount_failed = true,
+        .dont_mount = false,
+    };
+    
+    ret = esp_vfs_littlefs_register(&conf);
+    
+    // MODIFICATION ICI : On ne met plus de "return;", le Wi-Fi doit démarrer quoi qu'il arrive !
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Échec du montage de LittleFS (%s). Le Wi-Fi va quand même tenter de démarrer.", esp_err_to_name(ret));
+    }
+
+    // 3. Initialiser Wi-Fi (Mode AP)
+    wifi_init_softap();
+
+    // 4. Démarrer le Serveur HTTP (seulement si LittleFS fonctionne, sinon les fichiers html n'existent pas)
+    if (ret == ESP_OK) {
+        start_webserver();
+        ESP_LOGI(TAG, "Système prêt. En attente des commandes USSD...");
+    } else {
+        ESP_LOGW(TAG, "Le serveur Web n'a pas démarré car les fichiers index.html et tailwind.js sont inaccessibles.");
+    }
+}

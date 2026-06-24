@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Motorola C200 Simulator</title>
+    
+    <!-- Police rétro pour l'écran LCD -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="tailwind.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'lcd': ['"VT323"', 'monospace'],
+                        'sans': ['Inter', 'sans-serif']
+                    },
+                    colors: {
+                        'lcd-bg': '#a4bf8b',
+                        'phone-bg': '#d8d9db'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #171d19; /* Couleur de fond sombre de l'image */
+            background-image: radial-gradient(circle, #252d27 0%, #171d19 100%);
+        }
+
+        /* Effets 3D pour le corps du téléphone */
+        .phone-body {
+            box-shadow: 
+                0px 30px 60px rgba(0, 0, 0, 0.8), 
+                inset -5px -5px 15px rgba(0, 0, 0, 0.2), 
+                inset 5px 5px 15px rgba(255, 255, 255, 0.9);
+        }
+
+        /* Effet écran LCD */
+        .lcd-screen {
+            box-shadow: 
+                inset 0 0 10px rgba(0, 50, 0, 0.2),
+                inset 2px 2px 5px rgba(0,0,0,0.4);
+            text-shadow: 1px 1px 0px rgba(164, 191, 139, 0.5);
+        }
+
+        /* Boutons standards (Numpad & Soft keys) */
+        .btn-3d {
+            background: linear-gradient(to bottom, #fdfdfd 0%, #c4c4c4 100%);
+            box-shadow: 
+                0px 4px 0px #909090, 
+                0px 6px 10px rgba(0,0,0,0.3),
+                inset 0px 1px 2px rgba(255,255,255,0.8);
+            transition: all 0.05s ease;
+        }
+        .btn-3d:active {
+            transform: translateY(4px);
+            box-shadow: 
+                0px 0px 0px #909090, 
+                0px 2px 4px rgba(0,0,0,0.3),
+                inset 0px 1px 2px rgba(255,255,255,0.8);
+        }
+
+        /* Bouton APPEL (Vert) */
+        .btn-call {
+            background: linear-gradient(to bottom, #4ade80 0%, #16a34a 100%);
+            box-shadow: 0px 4px 0px #14532d, 0px 6px 10px rgba(0,0,0,0.3), inset 0px 1px 2px rgba(255,255,255,0.4);
+            color: white;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+        }
+        .btn-call:active {
+            transform: translateY(4px);
+            box-shadow: 0px 0px 0px #14532d, 0px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        /* Bouton FIN (Rouge) */
+        .btn-end {
+            background: linear-gradient(to bottom, #f87171 0%, #dc2626 100%);
+            box-shadow: 0px 4px 0px #7f1d1d, 0px 6px 10px rgba(0,0,0,0.3), inset 0px 1px 2px rgba(255,255,255,0.4);
+            color: white;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+        }
+        .btn-end:active {
+            transform: translateY(4px);
+            box-shadow: 0px 0px 0px #7f1d1d, 0px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        /* Bouton C (Gris clair, rond) */
+        .btn-c {
+            background: linear-gradient(to bottom, #e5e7eb 0%, #9ca3af 100%);
+            box-shadow: 0px 3px 0px #6b7280, 0px 4px 6px rgba(0,0,0,0.3);
+        }
+        .btn-c:active {
+            transform: translateY(3px);
+            box-shadow: 0px 0px 0px #6b7280, 0px 2px 3px rgba(0,0,0,0.3);
+        }
+
+        /* D-Pad */
+        .d-pad-bg {
+            background: linear-gradient(135deg, #4b5563, #1f2937);
+            box-shadow: 0px 4px 8px rgba(0,0,0,0.5), inset 0px 1px 2px rgba(255,255,255,0.2);
+        }
+        .d-pad-ok {
+            background: linear-gradient(to bottom, #6b7280, #374151);
+            box-shadow: 0px 2px 0px #111827, inset 0px 1px 1px rgba(255,255,255,0.2);
+        }
+        .d-pad-ok:active {
+            transform: translateY(2px);
+            box-shadow: 0px 0px 0px #111827;
+        }
+
+        /* Animation curseur */
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+        .cursor-blink {
+            animation: blink 1s step-end infinite;
+        }
+        
+        /* Cache la scrollbar sur l'écran LCD mais permet le scroll */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+
+<body class="flex flex-col items-center justify-center h-screen font-sans selection:bg-transparent">
+
+    <!-- Titre de l'application hors téléphone -->
+    <div class="absolute top-4 text-gray-500 tracking-widest text-sm uppercase opacity-50 font-mono text-center w-full">
+        Motorola C200 - 2002 - Simulateur
+    </div>
+
+    <div class="relative phone-body bg-gradient-to-b from-[#e8e9eb] via-[#d1d3d6] to-[#b3b6ba] w-[340px] rounded-[45px] p-5 pb-8 border border-gray-300 z-10 flex flex-col items-center">
+        
+        <!-- Antenne -->
+        <div class="absolute top-[-50px] right-[40px] w-4 h-[70px] bg-gradient-to-r from-[#d1d3d6] to-[#9ca3af] rounded-t-full -z-10 shadow-lg border-x border-t border-gray-400"></div>
+
+        <!-- Haut-parleur et Logo -->
+        <div class="mt-2 mb-4 flex flex-col items-center w-full">
+            <div class="text-gray-500 text-[8px] tracking-[1px] font-bold mb-1">||||||||||||||||||||||||||||</div>
+            <div class="text-gray-600 text-xs tracking-[5px] font-bold">M O T O R O L A</div>
+        </div>
+
+        <div class="w-full bg-black/80 rounded-[12px] p-1.5 mb-5 shadow-sm">
+            <div class="lcd-screen bg-lcd-bg h-[200px] rounded-[8px] p-2 font-lcd text-black flex flex-col relative overflow-hidden">
+                
+                <!-- Barre d'état (Signal, Heure, Batterie) -->
+                <div class="flex justify-between items-center text-lg leading-none border-b border-black/10 pb-1">
+                    <div class="flex items-end space-x-0.5">
+                        <div class="w-1.5 h-1.5 bg-black"></div>
+                        <div class="w-1.5 h-2 bg-black"></div>
+                        <div class="w-1.5 h-2.5 bg-black"></div>
+                        <div class="w-1.5 h-3 bg-black"></div>
+                    </div>
+                    <div id="clock" class="tracking-widest font-bold">22:11</div>
+                    <div class="border-[2px] border-black rounded-sm w-8 h-4 p-[1px] flex relative">
+                        <div class="bg-black w-full h-full"></div>
+                        <div class="absolute right-[-4px] top-0.5 w-[2px] h-2 bg-black"></div>
+                    </div>
+                </div>
+
+                <!-- Zone de contenu dynamique -->
+                <div id="screen-content" class="flex-grow flex flex-col items-center justify-center text-center mt-2 no-scrollbar overflow-y-auto whitespace-pre-wrap leading-tight text-[1.3rem]">
+                    <!-- Contenu par défaut (géré par JS) -->
+                </div>
+
+                <!-- Labels des touches d'action (Soft keys) -->
+                <div class="flex justify-between text-[1.1rem] mt-auto font-bold pt-1 border-t border-black/10">
+                    <div id="soft-left">Effacer</div>
+                    <div id="soft-right">Appel</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="w-full px-1">
+            
+            <!-- Ligne 1 : Soft keys et D-Pad -->
+            <div class="flex justify-between items-center mb-3">
+                <button class="btn-3d w-[70px] h-[25px] rounded-full active:bg-gray-300" onclick="handleSoftLeft()"></button>
+                
+                <!-- D-Pad (Croix directionnelle) -->
+                <div class="d-pad-bg w-[60px] h-[60px] rounded-full relative flex items-center justify-center">
+                    <div class="absolute top-1 text-[8px] text-white/50">▲</div>
+                    <div class="absolute bottom-1 text-[8px] text-white/50">▼</div>
+                    <div class="absolute left-1 text-[8px] text-white/50">◀</div>
+                    <div class="absolute right-1 text-[8px] text-white/50">▶</div>
+                    <!-- Bouton OK central -->
+                    <button class="d-pad-ok w-[30px] h-[30px] rounded-full text-white text-[10px] font-bold" onclick="handleOK()">OK</button>
+                </div>
+
+                <button class="btn-3d w-[70px] h-[25px] rounded-full active:bg-gray-300" onclick="handleSoftRight()"></button>
+            </div>
+
+            <!-- Ligne 2 : APPEL, C, FIN -->
+            <div class="flex justify-between items-center mb-5">
+                <button class="btn-call w-[110px] h-[35px] rounded-full font-bold text-sm tracking-wider" onclick="handleCall()">APPEL</button>
+                <button class="btn-c w-[35px] h-[35px] rounded-full font-bold text-sm text-gray-700" onclick="handleClear()">C</button>
+                <button class="btn-end w-[110px] h-[35px] rounded-full font-bold text-sm tracking-wider" onclick="handleEnd()">FIN</button>
+            </div>
+
+            <div class="grid grid-cols-3 gap-x-4 gap-y-3">
+                <button class="btn-3d h-[40px] rounded-[10px] flex flex-col items-center justify-center leading-none" onclick="handleKey('1')">
+                    <span class="text-xl font-bold text-gray-800">1</span>
+                </button>
+                <button class="btn-3d h-[40px] rounded-[10px] flex flex-col items-center justify-center leading-none" onclick="handleKey('2')">
+                    <span class="text-xl font-bold text-gray-800">2</span>
+                    <span class="text-[8px] text-gray-500 font-bold">ABC</span>
+                </button>
+                <button class="btn-3d h-[40px] rounded-[10px] flex flex-col items-center justify-center leading-none" onclick="handleKey('3')">
+                    <span class="text-xl font-bold text-gray-800">3</span>
+                    <span class="text-[8px] text-gray-500 font-bold">DEF</span>
+                </button>
+
+                <button class="btn-3d h-[40px] rounded-[10px] flex flex-col items-center justify-center leading-none" onclick="handleKey('4')">
+                    <span class="text-xl font-bold text-gray-800">4</span>
+                    <span class="text-[8px] text-gray-500 font-bold">GHI</span>
+                </button>
+                <button class="btn-3d h-[40px] rounded-[10px] flex flex-col items-center justify-center leading-none" onclick="handleKey('5')">
+                    <span class="text-xl font-bold text-gray-800">5</span>
+                    <span class="text-[8px] text-gray-500 font-bold">JKL</span>
+                </button>
+                <button class="btn-3d h-[40px] rounded-[10px] flex flex-col items-center justify-center leading-none" onclick="handleKey('6')">
+                    <span class="text-xl font-bold text-gray-800">6</span>
+                    <span class="text-[8px] text-gray-500 font-bold">MNO</span>
+                </button>
+
+                <button class="btn-3d h-[40px] rounded-[10px] flex flex-col items-center justify-center leading-none" onclick="handleKey('7')">
+                    <span class="text-xl font-bold text-gray-800">7</span>
+                    <span class="text-[8px] text-gray-500 font-bold">PQRS</span>
+                </button>
+                <button class="btn-3d h-[40px] rounded-[10px] flex flex-col items-center justify-center leading-none" onclick="handleKey('8')">
+                    <span class="text-xl font-bold text-gray-800">8</span>
+                    <span class="text-[8px] text-gray-500 font-bold">TUV</span>
+                </button>
+                <button class="btn-3d h-[40px] rounded-[10px] flex flex-col items-center justify-center leading-none" onclick="handleKey('9')">
+                    <span class="text-xl font-bold text-gray-800">9</span>
+                    <span class="text-[8px] text-gray-500 font-bold">WXYZ</span>
+                </button>
+
+                <button class="btn-3d h-[40px] rounded-[10px] flex flex-col items-center justify-center leading-none" onclick="handleKey('*')">
+                    <span class="text-2xl font-bold text-gray-800 mt-1">*</span>
+                    <span class="text-[14px] text-gray-500 font-bold leading-[0] mb-1">-</span>
+                </button>
+                <button class="btn-3d h-[40px] rounded-[10px] flex flex-col items-center justify-center leading-none" onclick="handleKey('0')">
+                    <span class="text-xl font-bold text-gray-800">0</span>
+                    <span class="text-[8px] text-gray-500 font-bold">ESP</span>
+                </button>
+                <button class="btn-3d h-[40px] rounded-[10px] flex flex-col items-center justify-center leading-none" onclick="handleKey('#')">
+                    <span class="text-xl font-bold text-gray-800">#</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Variables d'état ---
+        let currentInput = "*1234#";
+        let ussdState = "TYPING"; // États: TYPING, LOADING, MENU, MESSAGE
+        let currentMenuState = "IDLE";
+        
+        // Variables récoltées de la transaction
+        let transactionOption = "Non specifiee";
+        let transactionNumber = "Aucun";
+        let transactionAmount = "0 FC";
+
+        const screenContent = document.getElementById("screen-content");
+        const softLeft = document.getElementById("soft-left");
+        const softRight = document.getElementById("soft-right");
+
+        // --- COMMUNICATION ESP32 ---
+        // Fonction enrichie pour envoyer les informations structurées à l'ESP32
+        function envoyerCommandeESP32(commande, option = "N/A", numero = "N/A", montant = "N/A") {
+            try {
+                if (window.location.protocol === 'file:' || window.location.protocol === 'blob:' || window.location.protocol === 'data:') {
+                    console.log("[MODE SIMULATEUR] UART Virtuel :", {
+                        commande: commande,
+                        option: option,
+                        numero: numero,
+                        montant: montant
+                    });
+                    return;
+                }
+
+                // Construction de l'URL avec les paramètres récoltés pour l'UART de l'ESP32
+                const url = `/ussd?cmd=${encodeURIComponent(commande)}` +
+                            `&op=${encodeURIComponent(option)}` +
+                            `&num=${encodeURIComponent(numero)}` +
+                            `&amt=${encodeURIComponent(montant)}`;
+
+                fetch(url)
+                    .then(response => console.log("Infos transmises à l'ESP32"))
+                    .catch(err => console.warn("Erreur réseau (normal si hors-ligne)", err));
+            } catch (erreur) {
+                console.warn("[MODE HORS-LIGNE] Erreur :", erreur.message);
+            }
+        }
+
+        // --- Mise à jour de l'horloge ---
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('clock').innerText = 
+                String(now.getHours()).padStart(2, '0') + ":" + 
+                String(now.getMinutes()).padStart(2, '0');
+        }, 1000);
+
+        // --- Moteur de rendu de l'écran LCD ---
+        function renderScreen() {
+            if (ussdState === "TYPING") {
+                screenContent.innerHTML = `
+                    <div class="text-[1rem] tracking-widest uppercase mb-2">Composition</div>
+                    <div class="text-2xl tracking-widest font-bold">${currentInput}<span class="cursor-blink">|</span></div>
+                    <div class="w-[80%] h-[2px] bg-black my-2"></div>
+                    <div class="text-[1rem]">APPEL pour lancer</div>
+                `;
+                softLeft.innerText = "Effacer";
+                softRight.innerText = "Appel";
+            } 
+            else if (ussdState === "LOADING") {
+                screenContent.innerHTML = `
+                    <div class="flex-grow flex items-center justify-center">
+                        Connexion en cours...
+                    </div>
+                `;
+                softLeft.innerText = "";
+                softRight.innerText = "";
+            }
+            else if (ussdState === "MENU" || ussdState === "MESSAGE") {
+                let html = `<div class="w-full text-left font-bold text-[1.1rem] leading-none mb-1">`;
+                
+                if (currentMenuState === "MAIN") {
+                    html += `Menu MTK Global Money<br>1.Transfert<br>2.Achat Unites<br>3.Retrait<br>4.Mon Compte<br><br>> ${currentInput}<span class="cursor-blink">_</span>`;
+                    softLeft.innerText = "Annuler";
+                    softRight.innerText = "Reponse";
+                } 
+                else if (currentMenuState === "TRANSFERT") {
+                    html += `Transfert:<br>1.Vers MTK Global<br>2.Vers autre<br>0.Retour<br><br>> ${currentInput}<span class="cursor-blink">_</span>`;
+                    softLeft.innerText = "Annuler";
+                    softRight.innerText = "Reponse";
+                }
+                else if (currentMenuState === "NUM_INPUT") {
+                    html += `Entrez le numéro du bénéficiaire:<br><br>> ${currentInput}<span class="cursor-blink">_</span>`;
+                    softLeft.innerText = "Annuler";
+                    softRight.innerText = "OK";
+                }
+                else if (currentMenuState === "AMT_INPUT") {
+                    html += `Entrez le montant en FC:<br><br>> ${currentInput}<span class="cursor-blink">_</span>`;
+                    softLeft.innerText = "Annuler";
+                    softRight.innerText = "OK";
+                }
+                else if (currentMenuState === "CONFIRM") {
+                    html += `Confirmer transfert ?<br>Dest: ${transactionNumber}<br>Montant: ${transactionAmount}<br>1. Confirmer<br>2. Annuler<br><br>> ${currentInput}<span class="cursor-blink">_</span>`;
+                    softLeft.innerText = "Annuler";
+                    softRight.innerText = "OK";
+                }
+                else if (currentMenuState === "COMPTE") {
+                    html += `Mon Compte:<br>1.Solde<br>2.Changer PIN<br>0.Retour<br><br>> ${currentInput}<span class="cursor-blink">_</span>`;
+                    softLeft.innerText = "Annuler";
+                    softRight.innerText = "Reponse";
+                }
+                else if (currentMenuState === "SOLDE") {
+                    html += `Votre solde est de 14500 FC.<br>Frais: 0 FC.`;
+                    softLeft.innerText = "Quitter";
+                    softRight.innerText = "OK";
+                    ussdState = "MESSAGE";
+                }
+                else if (currentMenuState === "SUCCESS") {
+                    html += `Succès !<br>${transactionAmount} envoyé au ${transactionNumber}.`;
+                    softLeft.innerText = "Quitter";
+                    softRight.innerText = "OK";
+                    ussdState = "MESSAGE";
+                }
+                else if (currentMenuState === "ERROR") {
+                    html += `Problème de connexion ou code non valide.`;
+                    softLeft.innerText = "Quitter";
+                    softRight.innerText = "OK";
+                    ussdState = "MESSAGE";
+                }
+
+                html += `</div>`;
+                screenContent.innerHTML = html;
+            }
+        }
+
+        // --- Gestionnaires d'événements matériels ---
+        function handleKey(char) {
+            if (ussdState === "TYPING" || ussdState === "MENU") {
+                if (currentInput.length < 15) {
+                    currentInput += char;
+                    renderScreen();
+                }
+            }
+        }
+
+        // Action de suppression (Clear)
+        function handleClear() {
+            if (ussdState === "TYPING" || ussdState === "MENU") {
+                currentInput = currentInput.slice(0, -1);
+                renderScreen();
+            }
+        }
+
+        // Touche d'action gauche (Soft Left)
+        function handleSoftLeft() {
+            if (ussdState === "TYPING") {
+                handleClear();
+            } else if (ussdState === "MENU" || ussdState === "MESSAGE") {
+                handleEnd(); // Annuler / Quitter
+            }
+        }
+
+        // Touche d'action droite (Soft Right)
+        function handleSoftRight() {
+            if (ussdState === "TYPING") {
+                handleCall();
+            } else if (ussdState === "MENU" || ussdState === "MESSAGE") {
+                processMenuInput();
+            }
+        }
+
+        // Touche centrale OK
+        function handleOK() {
+            handleSoftRight();
+        }
+
+        // Fin / Réinitialisation (Touche Rouge)
+        function handleEnd() {
+            ussdState = "TYPING";
+            currentInput = "";
+            currentMenuState = "IDLE";
+            transactionOption = "Non specifiee";
+            transactionNumber = "Aucun";
+            transactionAmount = "0 FC";
+            renderScreen();
+        }
+
+        // Action de lancement d'appel (Touche Verte)
+        function handleCall() {
+            if (ussdState === "TYPING") {
+                if (currentInput === "") return;
+                
+                envoyerCommandeESP32(currentInput, "Initialisation", "Aucun", "0 FC");
+                
+                ussdState = "LOADING";
+                renderScreen();
+
+                setTimeout(() => {
+                    if (currentInput === "*1234#") {
+                        ussdState = "MENU";
+                        currentMenuState = "MAIN";
+                        currentInput = "";
+                    } else {
+                        ussdState = "MESSAGE";
+                        currentMenuState = "ERROR";
+                        currentInput = "";
+                    }
+                    renderScreen();
+                }, 800);
+            } else if (ussdState === "MENU") {
+                processMenuInput();
+            }
+        }
+
+        // --- Logique enrichie du flux USSD MTK Global Money ---
+        function processMenuInput() {
+            if (ussdState === "MESSAGE") {
+                handleEnd();
+                return;
+            }
+
+            const input = currentInput;
+            
+            // Envoyer d'abord la commande brute à l'ESP32 pour l'interaction UART en temps réel
+            envoyerCommandeESP32(input, transactionOption, transactionNumber, transactionAmount);
+            
+            ussdState = "LOADING";
+            renderScreen();
+
+            setTimeout(() => {
+                ussdState = "MENU";
+                
+                if (currentMenuState === "MAIN") {
+                    if (input === "1") {
+                        currentMenuState = "TRANSFERT";
+                        transactionOption = "Menu Transfert";
+                    } else if (input === "4") {
+                        currentMenuState = "COMPTE";
+                        transactionOption = "Menu Compte";
+                    } else {
+                        currentMenuState = "ERROR";
+                    }
+                } 
+                else if (currentMenuState === "TRANSFERT") {
+                    if (input === "0") {
+                        currentMenuState = "MAIN";
+                        transactionOption = "MTK Global Money";
+                    } else if (input === "1") {
+                        currentMenuState = "NUM_INPUT";
+                        transactionOption = "Transfert vers MTK Global";
+                    } else if (input === "2") {
+                        currentMenuState = "NUM_INPUT";
+                        transactionOption = "Transfert vers autre reseau";
+                    } else {
+                        currentMenuState = "ERROR";
+                    }
+                }
+                else if (currentMenuState === "NUM_INPUT") {
+                    if (input.length >= 8) { // validation simple du numero
+                        transactionNumber = input;
+                        currentMenuState = "AMT_INPUT";
+                    } else {
+                        currentMenuState = "ERROR";
+                    }
+                }
+                else if (currentMenuState === "AMT_INPUT") {
+                    if (input.length > 0 && !isNaN(input)) {
+                        transactionAmount = input + " FC";
+                        currentMenuState = "CONFIRM";
+                    } else {
+                        currentMenuState = "ERROR";
+                    }
+                }
+                else if (currentMenuState === "CONFIRM") {
+                    if (input === "1") {
+                        currentMenuState = "SUCCESS";
+                        // Envoi final à l'ESP32 pour confirmer et valider la transaction complète !
+                        envoyerCommandeESP32("CONFIRME", transactionOption, transactionNumber, transactionAmount);
+                    } else {
+                        currentMenuState = "MAIN";
+                    }
+                }
+                else if (currentMenuState === "COMPTE") {
+                    if (input === "0") {
+                        currentMenuState = "MAIN";
+                    } else if (input === "1") {
+                        currentMenuState = "SOLDE";
+                        transactionOption = "Consultation Solde";
+                        envoyerCommandeESP32("SOLDE", transactionOption, "Aucun", "0 FC");
+                    } else {
+                        currentMenuState = "ERROR";
+                    }
+                }
+
+                currentInput = "";
+                renderScreen();
+            }, 500);
+        }
+
+        // Initialisation de l'écran au démarrage
+        renderScreen();
+
+        // Support clavier physique
+        document.addEventListener('keydown', (e) => {
+            if (e.key >= '0' && e.key <= '9' || e.key === '*' || e.key === '#') {
+                handleKey(e.key);
+            } else if (e.key === 'Backspace') {
+                handleClear();
+            } else if (e.key === 'Enter') {
+                handleCall();
+            } else if (e.key === 'Escape') {
+                handleEnd();
+            }
+        });
+
+    </script>
+</body>
+</html>
