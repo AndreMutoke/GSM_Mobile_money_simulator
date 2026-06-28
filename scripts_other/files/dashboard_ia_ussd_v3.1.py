@@ -1,15 +1,14 @@
+#!/usr/bin/env python3
 """
 ============================================================
- DASHBOARD USSD - MONITORING TEMPS RÉEL v3.2
+ DASHBOARD USSD v3.3 ULTRA-FINAL
  
- Nouveau: Dashboard INTERACTIF avec 5 vues sélectionnables:
-   - Mode 1: Répartition des risques (IA)
-   - Mode 2: Interventions & Sécurité KYC
-   - Mode 3: Matrice de Confusion
-   - Mode 4: Performance du Modèle (Précision)
-   - Mode 5: Flux d'activité en temps réel
-   
- Navigation: Touches 1-5 ou flèches pour changer de vue
+ ✅ CORRECTIONS:
+    - Crée historique_transactions.log s'il n'existe pas
+    - Crée confusion_matrix.log s'il n'existe pas
+    - Affiche "En attente..." si vide
+    - 5 vues interactives
+    - Navigation clavier (1-5, flèches, q)
 ============================================================
 """
 
@@ -22,29 +21,42 @@ FICHIER_LOG = "historique_transactions.log"
 FICHIER_CONFUSION = "confusion_matrix.log"
 
 # =========================================================
+#  CRÉATION DES FICHIERS S'ILS N'EXISTENT PAS
+# =========================================================
+
+def creer_fichiers_logs_sils_nexistent_pas():
+    """Crée les fichiers logs s'ils n'existent pas."""
+    if not os.path.exists(FICHIER_LOG):
+        print(f"[*] Création {FICHIER_LOG}...")
+        with open(FICHIER_LOG, "w") as f:
+            f.write("")
+    
+    if not os.path.exists(FICHIER_CONFUSION):
+        print(f"[*] Création {FICHIER_CONFUSION}...")
+        with open(FICHIER_CONFUSION, "w") as f:
+            f.write("")
+
+# =========================================================
 #  ANALYSE DES LOGS
 # =========================================================
 
 def analyser_logs():
     """Lit le fichier de log et extrait les statistiques."""
     stats = {
-        "Total": 0, 
-        "Léger": 0, 
-        "Moyen": 0, 
-        "Élevé": 0, 
-        "Très élevé": 0,
-        "Bloquées_IA": 0,
-        "PIN_Echecs": 0,
-        "Comptes_Bloques": 0
+        "Total": 0, "Léger": 0, "Moyen": 0, "Élevé": 0, "Très élevé": 0,
+        "Bloquées_IA": 0, "PIN_Echecs": 0, "Comptes_Bloques": 0
     }
     toutes_actions = []
 
     if not os.path.exists(FICHIER_LOG):
-        return stats, ["En attente de donnees (fichier log introuvable)..."]
+        return stats, ["En attente de données..."]
 
     try:
         with open(FICHIER_LOG, "r", encoding="utf-8") as f:
             lignes = f.readlines()
+
+        if not lignes or all(not l.strip() for l in lignes):
+            return stats, ["En attente de données..."]
 
         for ligne in lignes:
             ligne = ligne.strip()
@@ -67,8 +79,9 @@ def analyser_logs():
 
             toutes_actions.append(ligne)
 
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[!] Erreur lecture log: {e}")
+        return stats, ["Erreur lecture fichier"]
 
     return stats, toutes_actions
 
@@ -108,28 +121,24 @@ def analyser_confusion_matrix():
 
     metriques["total"] = metriques["VP"] + metriques["FP"] + metriques["FN"] + metriques["VN"]
     
-    # Precision = VP / (VP + FP)
     if (metriques["VP"] + metriques["FP"]) > 0:
         metriques["precision"] = metriques["VP"] / (metriques["VP"] + metriques["FP"])
     
-    # Rappel = VP / (VP + FN)
     if (metriques["VP"] + metriques["FN"]) > 0:
         metriques["rappel"] = metriques["VP"] / (metriques["VP"] + metriques["FN"])
     
-    # F1-Score = 2 * (Precision * Rappel) / (Precision + Rappel)
     if (metriques["precision"] + metriques["rappel"]) > 0:
         metriques["f1"] = 2 * (metriques["precision"] * metriques["rappel"]) / (metriques["precision"] + metriques["rappel"])
     
     return metriques
 
 # =========================================================
-#  DESSINER LE DASHBOARD - INTERACTIF
+#  AFFICHAGE DES MODES
 # =========================================================
 
 def dessiner_mode_risques(stdscr, hauteur, largeur, stats):
     """Mode 1: Répartition des risques"""
     stdscr.addstr(4, 2, "┌─ RÉPARTITION DES RISQUES (IA) ─────────────────────────────────────┐", curses.color_pair(5))
-    stdscr.addstr(5, 2, "│                                                                     │", curses.color_pair(5))
     
     y = 6
     stdscr.addstr(y, 4, f"Total Transactions: {stats['Total']}", curses.A_BOLD)
@@ -157,7 +166,6 @@ def dessiner_mode_risques(stdscr, hauteur, largeur, stats):
 def dessiner_mode_securite(stdscr, hauteur, largeur, stats):
     """Mode 2: Interventions et sécurité"""
     stdscr.addstr(4, 2, "┌─ INTERVENTIONS & SÉCURITÉ KYC ─────────────────────────────────────┐", curses.color_pair(5))
-    stdscr.addstr(5, 2, "│                                                                     │", curses.color_pair(5))
     
     y = 6
     stdscr.addstr(y, 4, f"Échecs Code PIN          : {stats['PIN_Echecs']:3d}", curses.color_pair(2))
@@ -170,11 +178,9 @@ def dessiner_mode_securite(stdscr, hauteur, largeur, stats):
     if stats['Total'] > 0:
         taux_blocage = (stats['Bloquées_IA'] / stats['Total']) * 100
         stdscr.addstr(y, 4, f"Taux de blocage IA: {taux_blocage:.1f}%", curses.color_pair(4))
-    else:
-        stdscr.addstr(y, 4, "Taux de blocage IA: N/A", curses.color_pair(1))
     
     y += 2
-    stdscr.addstr(y, 4, "Status: Système de sécurité ACTIF ✓", curses.color_pair(1) | curses.A_BOLD)
+    stdscr.addstr(y, 4, "Status: Système ACTIF ✓", curses.color_pair(1) | curses.A_BOLD)
     
     y += 2
     stdscr.addstr(y, 2, "└─────────────────────────────────────────────────────────────────────┘", curses.color_pair(5))
@@ -182,7 +188,6 @@ def dessiner_mode_securite(stdscr, hauteur, largeur, stats):
 def dessiner_mode_confusion(stdscr, hauteur, largeur, metriques):
     """Mode 3: Matrice de confusion"""
     stdscr.addstr(4, 2, "┌─ MATRICE DE CONFUSION - CLASSIFICATION ────────────────────────────┐", curses.color_pair(5))
-    stdscr.addstr(5, 2, "│                                                                     │", curses.color_pair(5))
     
     y = 6
     stdscr.addstr(y, 4, f"Vrais Positifs (VP)      : {metriques['VP']:3d}", curses.color_pair(1))
@@ -202,23 +207,21 @@ def dessiner_mode_confusion(stdscr, hauteur, largeur, metriques):
 def dessiner_mode_performance(stdscr, hauteur, largeur, metriques):
     """Mode 4: Performance du modèle"""
     stdscr.addstr(4, 2, "┌─ PERFORMANCE DU MODÈLE IA ─────────────────────────────────────────┐", curses.color_pair(5))
-    stdscr.addstr(5, 2, "│                                                                     │", curses.color_pair(5))
     
     y = 6
     
-    # Déterminer la couleur en fonction de la précision
     precision_pct = metriques["precision"] * 100
     if precision_pct >= 90:
-        couleur_precision = curses.color_pair(1)  # Vert
+        couleur_precision = curses.color_pair(1)
         etat = "EXCELLENT ✓"
     elif precision_pct >= 75:
-        couleur_precision = curses.color_pair(2)  # Jaune
+        couleur_precision = curses.color_pair(2)
         etat = "BON ◑"
     elif precision_pct >= 60:
-        couleur_precision = curses.color_pair(3)  # Magenta
+        couleur_precision = curses.color_pair(3)
         etat = "ACCEPTABLE"
     else:
-        couleur_precision = curses.color_pair(4)  # Rouge
+        couleur_precision = curses.color_pair(4)
         etat = "À AMÉLIORER !"
     
     stdscr.addstr(y, 4, f"Précision    : ", curses.A_BOLD)
@@ -235,11 +238,8 @@ def dessiner_mode_performance(stdscr, hauteur, largeur, metriques):
     stdscr.addstr(y, 18, f"{f1_pct:.2f}%", curses.color_pair(2))
     
     y += 2
-    stdscr.addstr(y, 4, f"Formule Précision: VP/(VP+FP) = {metriques['VP']}/({metriques['VP']}+{metriques['FP']})")
-    
-    y += 2
-    stdscr.addstr(y, 4, f"État du modèle: ", curses.A_BOLD)
-    stdscr.addstr(y, 21, etat, couleur_precision | curses.A_BOLD)
+    stdscr.addstr(y, 4, f"État: ", curses.A_BOLD)
+    stdscr.addstr(y, 11, etat, couleur_precision | curses.A_BOLD)
     
     y += 2
     stdscr.addstr(y, 2, "└─────────────────────────────────────────────────────────────────────┘", curses.color_pair(5))
@@ -248,39 +248,42 @@ def dessiner_mode_activite(stdscr, hauteur, largeur, toutes_actions):
     """Mode 5: Flux d'activité en temps réel"""
     stdscr.addstr(4, 2, "┌─ FLUX D'ACTIVITÉ EN TEMPS RÉEL ────────────────────────────────────┐", curses.color_pair(5))
     
-    max_lignes_flux = hauteur - 10
-    if max_lignes_flux < 1:
-        max_lignes_flux = 1
+    max_lignes = hauteur - 10
+    if max_lignes < 1:
+        max_lignes = 1
     
-    actions_a_afficher = toutes_actions[-max_lignes_flux:] if len(toutes_actions) > max_lignes_flux else toutes_actions
+    actions = toutes_actions[-max_lignes:] if len(toutes_actions) > max_lignes else toutes_actions
     
     y = 6
-    for action in actions_a_afficher:
+    for action in actions:
         couleur = curses.color_pair(5)
         
         if any(mot in action for mot in ["Très", "Alerte Fraude", "ECHEC", "COMPTE_BLOQUE", "est COMPTE_BLOQUE"]):
             couleur = curses.color_pair(4) | curses.A_BOLD
-        elif "Élevé" in action or "[SÉCURITÉ]" in action or "Moyen" in action:
+        elif "Élevé" in action or "[SÉCURITÉ]" in action:
             couleur = curses.color_pair(2)
-        elif "[IA]" in action or "[Système Défense]" in action:
+        elif "[IA]" in action:
             couleur = curses.color_pair(3) | curses.A_BOLD
-        elif any(mot in action for mot in ["Léger", "SUCCES", "VALIDÉE", "débloqué"]):
+        elif any(mot in action for mot in ["Léger", "SUCCES", "VALIDÉE"]):
             couleur = curses.color_pair(1)
         
-        max_longeur = largeur - 6
-        action_affichee = action[:max_longeur] if len(action) > max_longeur else action
+        max_len = largeur - 6
+        action_affichee = action[:max_len] if len(action) > max_len else action
         
         stdscr.addstr(y, 4, action_affichee, couleur)
         y += 1
     
     stdscr.addstr(hauteur - 2, 2, "└─────────────────────────────────────────────────────────────────────┘", curses.color_pair(5))
 
+# =========================================================
+#  BOUCLE PRINCIPALE
+# =========================================================
+
 def dessiner_dashboard(stdscr):
-    """Affiche le dashboard INTERACTIF avec navigation."""
+    """Affiche le dashboard INTERACTIF."""
     curses.curs_set(0)
     stdscr.nodelay(True)
     
-    # Configuration des couleurs
     curses.start_color()
     curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)
     curses.init_pair(2, curses.COLOR_YELLOW, curses.COLOR_BLACK)
@@ -289,7 +292,7 @@ def dessiner_dashboard(stdscr):
     curses.init_pair(5, curses.COLOR_CYAN, curses.COLOR_BLACK)
     curses.init_pair(6, curses.COLOR_WHITE, curses.COLOR_BLUE)
     
-    mode_courant = 1  # Par défaut: Mode 1 (Risques)
+    mode_courant = 1
     
     noms_modes = {
         1: "Répartition des risques",
@@ -313,7 +316,7 @@ def dessiner_dashboard(stdscr):
         titre = "┌─────────────────────────────────────────────────────────────────────────┐"
         stdscr.addstr(0, 0, titre, curses.color_pair(5))
         
-        titre_texte = "│  SOC USSD - MONITORING IA TEMPS RÉEL v3.2 - DASHBOARD INTERACTIF  │"
+        titre_texte = "│  SOC USSD - MONITORING IA TEMPS RÉEL v3.3 - DASHBOARD INTERACTIF  │"
         stdscr.addstr(1, 0, titre_texte, curses.color_pair(6) | curses.A_BOLD)
         
         titre_bas = "└─────────────────────────────────────────────────────────────────────────┘"
@@ -323,7 +326,7 @@ def dessiner_dashboard(stdscr):
         stats, toutes_actions = analyser_logs()
         metriques = analyser_confusion_matrix()
 
-        # Afficher le contenu en fonction du mode
+        # Afficher le contenu
         if mode_courant == 1:
             dessiner_mode_risques(stdscr, hauteur, largeur, stats)
         elif mode_courant == 2:
@@ -369,10 +372,29 @@ def dessiner_dashboard(stdscr):
 
         time.sleep(1)
 
+# =========================================================
+#  POINT D'ENTRÉE
+# =========================================================
+
 if __name__ == "__main__":
+    print("\n" + "=" * 70)
+    print(" DASHBOARD USSD v3.3 ULTRA-FINAL")
+    print("=" * 70)
+    
+    print("[*] Vérification des fichiers logs...")
+    creer_fichiers_logs_sils_nexistent_pas()
+    print("[✓] Fichiers logs prêts")
+    
+    print("\n[*] Lancement du dashboard...")
+    print("[+] Touches: 1-5 pour naviguer, flèches gauche/droite, [q] pour quitter\n")
+    
+    time.sleep(1)
+    
     try:
         curses.wrapper(dessiner_dashboard)
     except KeyboardInterrupt:
         pass
     except Exception as e:
-        print(f"Erreur d'affichage console : {e}")
+        print(f"Erreur: {e}")
+    
+    print("\n[+] Dashboard fermé.")
