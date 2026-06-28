@@ -208,51 +208,6 @@
             }
         }
 
-        /**
-         * simulerCalculCellID(mode)
-         * Calcule localement une position BTS initiale pour le scan.
-         * Utilise simProgress=0 (début de trajet) et retourne un objet
-         * compatible avec le format attendu par envoyerCommandeESP32("LOC", ...).
-         *
-         * FIX : cette fonction était appelée dans handleSoftLeft() mais
-         * n'était jamais définie, causant une ReferenceError au clic sur
-         * "Localisation (Cell ID)" dans le menu app.
-         */
-        function simulerCalculCellID(mode) {
-            const trajet    = mode === 1 ? trajetSim1    : trajetSim2;
-            const btsList   = mode === 1 ? btsPositionsSim1 : btsPositionsSim2;
-
-            // Position au début du trajet
-            const msLat = trajet.startLat;
-            const msLon = trajet.startLon;
-
-            const rawBts = btsList.map(bts => {
-                const dx = bts.lon - msLon;
-                const dy = bts.lat - msLat;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                let rxLev = Math.round(-50 - (distance * 450));
-                if (rxLev < -99) rxLev = -99;
-                if (rxLev > -45) rxLev = -45;
-                return { id: bts.id, cellId: bts.cellId, name: bts.name,
-                         rxLev: rxLev, lat: bts.lat, lon: bts.lon };
-            });
-
-            rawBts.sort((a, b) => b.rxLev - a.rxLev);
-
-            const mcc = 630, mnc = 89, lac = 4001;
-            const precision = Math.floor(Math.abs(rawBts[2].rxLev) * 2.5);
-            const lieu = mode === 1 ? "Lshi, Katuba" : "Kin, Gombe";
-
-            return {
-                mcc, mnc, lac,
-                lat: msLat.toFixed(5),
-                lon: msLon.toFixed(5),
-                precision,
-                lieu,
-                bts: rawBts
-            };
-        }
-
         function envoyerCommandeESP32(action, option, numero, montant, pin = "") {
             let url = "";
             // Si c'est une requête de localisation initiale (Scan)
@@ -265,40 +220,23 @@
             if (window.location.hostname !== "192.168.4.1" && window.location.hostname !== "localhost") {
                 setTimeout(() => {
                     let simResponse = "";
-                    if (action === "APPEL_USSD") {
-                        simResponse = "REPONSE;OK;Menu USSD ouvert";
-                    } else if (action === "SOLDE") {
-                        if (pin === "1234") {
-                            simResponse = "REP_SOLDE;OK;DEMO USER|Num: 0812345678|Solde: 320.00 USD";
-                        } else {
-                            // 3 mauvais PIN → COMPTE_BLOQUE pour déclencher le flux KYC
-                            simResponse = "REP_SOLDE;ERREUR;Code PIN incorrect.|COMPTE_BLOQUE";
+                    if (action === "APPEL_USSD") { simResponse = "REPONSE;OK;Menu USSD ouvert"; } 
+                    else if (action === "SOLDE") {
+                        if (pin === "1234") simResponse = "REP_SOLDE;OK;Solde: 320.00 USD";
+                        else simResponse = "ERREUR;COMPTE_BLOQUE;PIN incorrect. COMPTE_BLOQUE";
+                    } 
+                    else if (action === "CONFIRME") {
+                        if (option.includes("RECOVERY_")) simResponse = "REP_TRANS;OK;KYC Verifie.\\nCompte debloque !\\nNouveau PIN: 1234";
+                        else {
+                            if (pin === "1234") simResponse = `REP_TRANS;OK;Transfert de ${montant} USD au ${numero} reussi.`;
+                            else simResponse = "ERREUR;COMPTE_BLOQUE;Code PIN incorrect. COMPTE_BLOQUE";
                         }
-                    } else if (action === "CONFIRME") {
-                        if (option.startsWith("RECOVERY_")) {
-                            // KYC : on accepte NOM=DEMO, POSTNOM=USER (montant=post-nom)
-                            const nomSaisi  = option.split("_")[1] || "";
-                            const pnomSaisi = montant || "";
-                            if (nomSaisi.toUpperCase() === "DEMO" && pnomSaisi.toUpperCase() === "USER") {
-                                simResponse = "REP_TRANS;OK;Identité confirmée.|Votre compte est débloqué.|Veuillez réessayer.";
-                            } else {
-                                simResponse = "REP_TRANS;ERREUR;Informations KYC incorrectes.|Le compte reste bloqué.";
-                            }
-                        } else {
-                            if (pin === "1234") {
-                                simResponse = `REP_TRANS;OK;Transfert effectue!|Risque: Léger|Vers: DEST INCONNU|Montant: ${montant} USD`;
-                            } else {
-                                simResponse = "REP_TRANS;ERREUR;Code PIN incorrect.|COMPTE_BLOQUE";
-                            }
-                        }
-                    } else if (action === "LOC") {
-                        simResponse = "REP_LOC;OK;Validation HLR Reussie|Zones: Katuba,Kenya Centre";
-                    } else if (action === "LOC_UPDATE") {
-                        // Mise à jour silencieuse, pas de réponse nécessaire
-                        return;
+                    }
+                    else if (action === "LOC") {
+                        simResponse = "REP_LOC;OK;Validation HLR Reussie"; // Simulation validation HLR
                     }
                     traiterReponsePasserelle(simResponse);
-                }, 800);
+                }, 1000);
                 return;
             }
 
@@ -316,9 +254,7 @@
             let message = parts[2] || "";
             message = message.replace(/\\n/g, '\n').replace(/\|/g, '\n');
 
-            // COMPTE_BLOQUE peut apparaître dans le statut ou dans le message
-            const estBloque = statut === "COMPTE_BLOQUE" || message.includes("COMPTE_BLOQUE");
-            if (statut === "ERREUR" && estBloque) {
+            if (statut === "ERREUR" && message.includes("COMPTE_BLOQUE")) {
                 currentMenuState = "REC_NOM";
                 currentInput = "";
                 renderScreen();
